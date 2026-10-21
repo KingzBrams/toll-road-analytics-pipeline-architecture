@@ -1,0 +1,31 @@
+# Environment variables (SENSITIVE)
+.env
+*.env
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual Environments & cursor
+venv/
+env/
+ENV/
+.venv/
+.cursorrules
+
+# Database Logs & Data Storage (from Docker)
+*.log
+logs/
+postgres_data/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
