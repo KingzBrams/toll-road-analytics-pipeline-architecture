@@ -53,7 +53,6 @@ with DAG(
     extract_employee >> validate_employee
 
 
-
   # ==========================================
   # 2. TASKGROUP: MASTER PROVIDERS
   # ==========================================
@@ -154,6 +153,7 @@ with DAG(
             "limit": 1000,
             "last_watermark": "{{ ds }}",
             "filter_key": "inserted_at",
+            "lookback_days": 3,
             "file_name": "activity"
         },
         trigger_rule=TriggerRule.ALL_DONE,
