@@ -18,6 +18,7 @@ with DAG(
     schedule="@daily",
     catchup=False,
     max_active_runs=1,
+    max_active_tasks=5
 ) as dag:
 
   start_task = EmptyOperator(task_id="start_pipeline")
@@ -35,6 +36,8 @@ with DAG(
         op_kwargs={
             "api_url": "http://data-gen-api:8000/api/v1/masters/employees",
             "limit": 1000,
+            "last_watermark": "{{ ds }}",
+            "filter_key": "updated_at"
         },
     )
 
@@ -96,9 +99,6 @@ with DAG(
         python_callable=extract_data_from_api,
         op_kwargs={
             "api_url": "http://data-gen-api:8000/api/v1/facts/training-activities",
-            "last_watermark": ( 
-                "2026-10-01T00:00:00"
-            ),
             "limit": 5000,
         },
         trigger_rule=TriggerRule.ALL_DONE,
