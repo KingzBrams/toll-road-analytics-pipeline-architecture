@@ -17,8 +17,7 @@ with DAG(
     start_date=datetime(2026, 1, 1),
     schedule="@daily",
     catchup=False,
-    max_active_runs=1,
-    max_active_tasks=5
+    max_active_runs=1
 ) as dag:
 
   start_task = EmptyOperator(task_id="start_pipeline")
@@ -27,9 +26,8 @@ with DAG(
   # ==========================================
   # 1. TASKGROUP: MASTER EMPLOYEES
   # ==========================================
-  with TaskGroup(
-      "ingest_data_master_employee", tooltip="Ingest Master Employees"
-  ) as tg_employees:
+  with TaskGroup("ingest_data_master_employee", tooltip="Ingest Master Employees") as tg_employees:
+    
     extract_employee = PythonOperator(
         task_id="extract_employee_task",
         python_callable=extract_data_from_api,
@@ -37,72 +35,116 @@ with DAG(
             "api_url": "http://data-gen-api:8000/api/v1/masters/employees",
             "limit": 1000,
             "last_watermark": "{{ ds }}",
-            "filter_key": "updated_at"
+            "filter_key": "updated_at",
+            "file_name": "employee"
         },
     )
+    
+    validate_employee = PythonOperator(
+        task_id="validate_employee_task",
+        python_callable=validate_employees_data,
+    )
+
+    extract_employee >> validate_employee
+
 
 
   # ==========================================
   # 2. TASKGROUP: MASTER PROVIDERS
   # ==========================================
-  with TaskGroup(
-      "ingest_data_master_provider", tooltip="Ingest Master Providers"
-  ) as tg_providers:
+  with TaskGroup("ingest_data_master_provider", tooltip="Ingest Master Providers") as tg_providers:
+    
     extract_provider = PythonOperator(
         task_id="extract_provider_task",
         python_callable=extract_data_from_api,
         op_kwargs={
             "api_url": "http://data-gen-api:8000/api/v1/masters/providers",
             "limit": 1000,
+            "last_watermark": "{{ ds }}",
+            "filter_key": "updated_at",
+            "file_name": "provider"
         },
     )
+
+    validate_provider = PythonOperator(
+        task_id="validate_provider_task",
+        python_callable=validate_providers_data,
+    )
+
+    extract_provider >> validate_provider
 
   # ==========================================
   # 3. TASKGROUP: MASTER COMPETENCIES
   # ==========================================
-  with TaskGroup(
-      "ingest_data_master_competency", tooltip="Ingest Master Competencies"
-  ) as tg_competencies:
+  with TaskGroup("ingest_data_master_competency", tooltip="Ingest Master Competencies") as tg_competencies:
+    
     extract_competency = PythonOperator(
         task_id="extract_competency_task",
         python_callable=extract_data_from_api,
         op_kwargs={
             "api_url": "http://data-gen-api:8000/api/v1/masters/competencies",
             "limit": 1000,
+            "last_watermark": "{{ ds }}",
+            "filter_key": "updated_at",
+            "file_name": "competency"
         },
     )
+
+    validate_competency = PythonOperator(
+        task_id="validate_competency_task",
+        python_callable=validate_competencies_data,
+    )
+
+    extract_competency >> validate_competency
 
   # ==========================================
   # 4. TASKGROUP: MASTER UNITS
   # ==========================================
-  with TaskGroup(
-      "ingest_data_master_unit", tooltip="Ingest Master Units/Cost Centers"
-  ) as tg_units:
+  with TaskGroup("ingest_data_master_unit", tooltip="Ingest Master Units/Cost Centers") as tg_units:
+    
     extract_unit = PythonOperator(
         task_id="extract_unit_task",
         python_callable=extract_data_from_api,
         op_kwargs={
             "api_url": "http://data-gen-api:8000/api/v1/masters/units",
             "limit": 1000,
+            "last_watermark": "{{ ds }}",
+            "filter_key": "updated_at",
+            "file_name": "unit"
         },
     )
+
+    validate_unit = PythonOperator(
+        task_id="validate_unit_task",
+        python_callable=validate_units_data,
+    )
+
+    extract_unit >> validate_unit
 
   # ==========================================
   # 5. TASKGROUP: FACT TRAINING ACTIVITIES (Incremental)
   # ==========================================
-  with TaskGroup(
-      "ingest_data_fact_activities", tooltip="Ingest Fact Training Activities"
-  ) as tg_activities:
+  with TaskGroup("ingest_data_fact_activities", tooltip="Ingest Fact Training Activities") as tg_activities:
   
     extract_activities = PythonOperator(
         task_id="extract_activities_task",
         python_callable=extract_data_from_api,
         op_kwargs={
             "api_url": "http://data-gen-api:8000/api/v1/facts/training-activities",
-            "limit": 5000,
+            "limit": 1000,
+            "last_watermark": "{{ ds }}",
+            "filter_key": "inserted_at",
+            "file_name": "activity"
         },
         trigger_rule=TriggerRule.ALL_DONE,
     )
+
+    validate_activity = PythonOperator(
+        task_id="validate_activity_task",
+        python_callable=validate_activity_data,
+    )
+
+    extract_activities >> validate_activity
 
   # ==========================================
   # ORKESTRASI DAG (DEPENDENCIES)
