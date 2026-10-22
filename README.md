@@ -1,2 +1,3 @@
-# toll-road-analytics-pipeline-architecture
-End-to-end ELT pipeline architecture built with Airflow, dbt, and ClickHouse, featuring a custom FastAPI mock source, incremental loading, and layered data warehouse modeling.
+# Toll Road Corporate Learning ELT Pipeline
+
+> A production-grade, end-to-end ELT data pipeline simulating corporate training analytics for a toll road company.

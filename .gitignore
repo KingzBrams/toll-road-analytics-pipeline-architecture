@@ -29,3 +29,13 @@ postgres_data/
 # OS Generated Files
 .DS_Store
 Thumbs.db
+
+# Documents
+docs/
+
+# Database Logs & Data Storage (from Docker)
+*.log
+logs/
+postgres_data/
+airflow/logs/
+

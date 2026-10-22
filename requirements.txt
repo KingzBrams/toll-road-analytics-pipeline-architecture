@@ -1,0 +1,10 @@
+# data generator
+fastapi>=0.100.0
+uvicorn>=0.22.0
+faker>=18.0.0
+pydantic>=2.0.0
+
+# ETL pipeline
+requests>=2.31.0
+pandas>=2.0.0
+clickhouse-driver>=0.2.6
