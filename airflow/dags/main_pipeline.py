@@ -42,7 +42,12 @@ with DAG(
     
     validate_employee = PythonOperator(
         task_id="validate_employee_task",
-        python_callable=validate_employees_data,
+        python_callable=validate_data_from_api,
+        op_kwargs={
+            "extract_task_id": "extract_employee_task",
+            "task_group_id": "ingest_data_master_employee",
+            "data_name": "master_employee",
+        },
     )
 
     extract_employee >> validate_employee
@@ -68,7 +73,12 @@ with DAG(
 
     validate_provider = PythonOperator(
         task_id="validate_provider_task",
-        python_callable=validate_providers_data,
+        python_callable=validate_data_from_api,
+        op_kwargs={
+            "extract_task_id": "extract_provider_task",
+            "task_group_id": "ingest_data_master_provider",
+            "data_name": "master_provider",
+        },
     )
 
     extract_provider >> validate_provider
@@ -92,7 +102,12 @@ with DAG(
 
     validate_competency = PythonOperator(
         task_id="validate_competency_task",
-        python_callable=validate_competencies_data,
+        python_callable=validate_data_from_api,
+        op_kwargs={
+            "extract_task_id": "extract_competency_task",
+            "task_group_id": "ingest_data_master_competency",
+            "data_name": "master_competency",
+        },
     )
 
     extract_competency >> validate_competency
@@ -116,7 +131,12 @@ with DAG(
 
     validate_unit = PythonOperator(
         task_id="validate_unit_task",
-        python_callable=validate_units_data,
+        python_callable=validate_data_from_api,
+        op_kwargs={
+            "extract_task_id": "extract_unit_task",
+            "task_group_id": "ingest_data_master_unit",
+            "data_name": "master_unit",
+        },
     )
 
     extract_unit >> validate_unit
@@ -141,7 +161,12 @@ with DAG(
 
     validate_activity = PythonOperator(
         task_id="validate_activity_task",
-        python_callable=validate_activity_data,
+        python_callable=validate_data_from_api,
+        op_kwargs={
+            "extract_task_id": "extract_activities_task",
+            "task_group_id": "ingest_data_fact_activities",
+            "data_name": "fact_activity",
+        },
     )
 
     extract_activities >> validate_activity
@@ -154,4 +179,5 @@ with DAG(
       tg_providers,
       tg_competencies,
       tg_units,
-  ] >> tg_activities >> end_task
+      tg_activities
+  ] >> end_task

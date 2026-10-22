@@ -11,11 +11,10 @@ import json
 def extract_data_from_api(**kwargs) -> str:
   """Extract Data API dengan pagination dan metode Append ke File (Format JSONL)."""
   
+  api_url = kwargs.get("api_url")
   limit = kwargs.get("limit", 5000)
   last_watermark = kwargs.get("last_watermark")
-  api_url = kwargs.get("api_url")
   file_name = kwargs.get("file_name", "raw_data")
-
   params = {"limit": limit}
   if last_watermark:
     filter_field = kwargs.get("filter_key", "updated_at")
@@ -24,10 +23,8 @@ def extract_data_from_api(**kwargs) -> str:
   raw_dir = Path("/opt/airflow/logs/raw_data")
   raw_dir.mkdir(parents=True, exist_ok=True)
 
-  # Menggunakan ekstensi .jsonl (JSON Lines) agar aman di-append per baris
   file_path = raw_dir / f"{file_name}.jsonl"
 
-  # Hapus file lama jika ada sebelum proses loop (agar data run sebelumnya tidak ikut ter-append)
   if file_path.exists():
     file_path.unlink()
 
@@ -39,7 +36,7 @@ def extract_data_from_api(**kwargs) -> str:
   logger.info(f"🔹 START APPEND EXTRACTION: [{api_url}]")
 
   try:
-    # Membuka file dengan mode 'a' (append) selama proses pagination berlangsung
+
     with open(file_path, "a", encoding="utf-8") as f:
       while True:
         params["offset"] = offset
@@ -51,17 +48,16 @@ def extract_data_from_api(**kwargs) -> str:
         result_json = response.json()
         page_data = result_json.get("data", [])
 
+        # Break there is not page_data
         if not page_data:
-          # Jika halaman kosong, hentikan loop
           break
-
-        # Tulis setiap baris data langsung ke file secara append (baris per baris)
+        
+        # Write JSON (append method)
         for item in page_data:
           f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
         total_fetched += len(page_data)
 
-        # Jika data yang ditarik kurang dari limit, berarti ini halaman terakhir
         if len(page_data) < limit:
           break
 
@@ -74,8 +70,9 @@ def extract_data_from_api(**kwargs) -> str:
     )
     logger.info("=" * 150)
 
-    # Push filepath string ke XCom
+    # Push filepath string into XCom
     kwargs["ti"].xcom_push(key="data_json", value=str(file_path))
+    kwargs["ti"].xcom_push(key="data_name", value=str(file_name))
     return str(file_path)
 
   except requests.exceptions.RequestException as e:
@@ -85,79 +82,271 @@ def extract_data_from_api(**kwargs) -> str:
 
 # ---------------------------------------------------------
 # TASK: VALIDATOR DATA FROM API 
-# -------------------------------------------------------   --
-def universal_base_validator(raw_data: pd.DataFrame) -> pd.DataFrame:
-    """Universal Validator Data From API"""
+# ---------------------------------------------------------
 
-    clean_data = pd.DataFrame(raw_data)
-    
-    # handle missing values and trim whitespace
-    str_cols = clean_data.select_dtypes(include=['object']).columns
-    for col in str_cols:
-        clean_data[col] = clean_data[col].astype(str).str.strip()
-        clean_data[col] = clean_data[col].replace({
-            "nan": None,
-            "NaN": None,
-            "NULL": None,
-            "NaT": None,
-            "": None,
-            "-": None,
-            "N/A": None,
-            "n/a": None,
-            "Null": None
-        }) 
+DATASET_SCHEMAS = {
+    "master_employee": {
+        "npp": "String",
+        "nama": "String",
+        "level": "String",
+        "grade": "String",
+        "jabatan": "String",
+        "unit_kerja": "String",
+        "gender": "String",
+        "updated_at": "DateTime",
+    },
+    "master_provider": {
+        "provider_id": "String",
+        "learning_provider": "String",
+        "lokasi_kegiatan": "String",
+        "updated_at": "DateTime",
+    },
+    "master_competencies": {
+        "kode_komp": "String",
+        "nama_kompetensi": "String",
+        "learning_academy": "String",
+        "sub_learning_academy": "String",
+        "standard_point": "UInt64",
+        "updated_at": "DateTime",
+    },
+    "master_units": {
+        "unit_code": "String",
+        "unit_kerja": "String",
+        "annual_budget_plafond": "UInt64",
+        "updated_at": "DateTime",
+    },
+    "master_activity": {
+        "activity_id": "String",
+        "nama_kegiatan": "String",
+        "jenis_pembelajaran": "String",
+        "category": "String",
+        "type": "String",
+        "type_event": "String",
+        "learning_academy": "String",
+        "sub_learning_academy": "String",
+        "kode_komp": "String",
+        "npp": "String",
+        "nama": "String",
+        "level": "String",
+        "grade": "String",
+        "jabatan": "String",
+        "unit_kerja": "String",
+        "gender": "String",
+        "status_kegiatan": "String",
+        "type_narasumber": "String",
+        "type_mc": "String",
+        "point": "UInt64",
+        "total_poin": "UInt64",
+        "tanggal_event": "Date",
+        "jam_mulai": "Time",
+        "jam_selesai": "Time",
+        "kat_sertifikasi": "String",
+        "inisiator_unit": "String",
+        "learning_provider": "String",
+        "lokasi_kegiatan": "String",
+        "biaya_rab_ldd": "UInt64",
+        "budget_realisasi_rab_led": "UInt64",
+        "biaya_penginapan": "UInt64",
+        "biaya_transportasi": "UInt64",
+        "biaya_konsumsi": "UInt64",
+        "biaya_training_kit": "UInt64",
+        "biaya_fasilitas_pendukung": "UInt64",
+        "total_anggaran": "UInt64",
+        "purchase_number": "String",
+        "purchase_date": "Date",
+        "npp_pic": "String",
+        "nama_pic": "String",
+        "insert_at": "DateTime",
+    },
+}
 
-    # drop duplicate data
+NULL_VALUES = {"", "-", "N/A", "n/a", "NULL", "Null", "NaN", "nan"}
+
+def validate_data_from_api(**kwargs) -> str:
+    """Validasi data JSONL berdasarkan schema dataset."""
+
+    extract_task_id = kwargs["extract_task_id"]
+    task_group_id = kwargs["task_group_id"]
+    data_name = kwargs["data_name"]
+
+    schema = DATASET_SCHEMAS.get(data_name)
+    if schema is None:
+        raise ValueError(
+            f"Schema untuk dataset '{data_name}' tidak ditemukan. "
+            f"Dataset tersedia: {list(DATASET_SCHEMAS)}"
+        )
+
+    raw_path = kwargs["ti"].xcom_pull(
+        task_ids=f"{task_group_id}.{extract_task_id}",
+        key="data_json",
+    )
+
+    if not raw_path:
+        raise ValueError(
+            f"Path file hasil extraction tidak ditemukan dari "
+            f"task '{extract_task_id}'."
+        )
+
+    file_path = Path(raw_path)
+
+    if not file_path.is_file():
+        raise FileNotFoundError(
+            f"File hasil extraction tidak ditemukan: {file_path}"
+        )
+
+    logger.info("Starting validation for dataset: %s", data_name)
+
+    clean_data = pd.read_json(file_path, lines=True)
+
+    if clean_data.empty:
+        logger.warning("Dataset '%s' tidak memiliki data.", data_name)
+
+    expected_columns = set(schema)
+    actual_columns = set(clean_data.columns)
+
+    missing_columns = expected_columns - actual_columns
+    unexpected_columns = actual_columns - expected_columns
+
+    if missing_columns:
+        raise ValueError(
+            f"Dataset '{data_name}' kehilangan kolom wajib: "
+            f"{sorted(missing_columns)}"
+        )
+
+    if unexpected_columns:
+        logger.warning(
+            "Dataset '%s' memiliki kolom yang tidak terdaftar: %s",
+            data_name,
+            sorted(unexpected_columns),
+        )
+
+    string_columns = [
+        column
+        for column, data_type in schema.items()
+        if data_type == "String"
+    ]
+
+    for column in string_columns:
+        clean_data[column] = clean_data[column].map(
+            lambda value: (
+                None
+                if pd.isna(value)
+                else (
+                    None
+                    if isinstance(value, str)
+                    and value.strip() in NULL_VALUES
+                    else (
+                        value.strip()
+                        if isinstance(value, str)
+                        else value
+                    )
+                )
+            )
+        )
+
+    for column, data_type in schema.items():
+        if data_type == "String":
+            invalid_mask = clean_data[column].map(
+                lambda value: (
+                    not pd.isna(value)
+                    and not isinstance(value, str)
+                )
+            )
+            if invalid_mask.any():
+                raise ValueError(
+                    f"Kolom '{column}' pada '{data_name}' "
+                    "mengandung nilai non-string."
+                )
+
+        elif data_type == "UInt64":
+            numeric = pd.to_numeric(
+                clean_data[column], errors="coerce"
+            )
+
+            invalid_mask = (
+                numeric.isna()
+                & clean_data[column].notna()
+            )
+
+            invalid_mask |= (
+                numeric.notna()
+                & (
+                    (numeric < 0)
+                    | (numeric % 1 != 0)
+                    | (numeric > 18446744073709551615)
+                )
+            )
+
+            if invalid_mask.any():
+                raise ValueError(
+                    f"Kolom '{column}' pada '{data_name}' "
+                    "mengandung nilai yang bukan UInt64 valid."
+                )
+
+            clean_data[column] = numeric.astype("UInt64")
+
+        elif data_type == "DateTime":
+            original = clean_data[column]
+            parsed = pd.to_datetime(
+                original, errors="coerce", utc=True
+            )
+
+            invalid_mask = parsed.isna() & original.notna()
+
+            if invalid_mask.any():
+                raise ValueError(
+                    f"Kolom '{column}' pada '{data_name}' "
+                    "mengandung nilai DateTime yang tidak valid."
+                )
+
+            clean_data[column] = parsed
+
+        else:
+            raise ValueError(
+                f"Tipe data '{data_type}' belum didukung "
+                f"untuk kolom '{column}'."
+            )
+
+    rows_before = len(clean_data)
     clean_data = clean_data.drop_duplicates()
+    duplicates_removed = rows_before - len(clean_data)
 
-    logger.info(f"[+] Universal validation passed. Rows: {len(clean_data)}")
+    validated_dir = Path("/opt/airflow/logs/validated_data")
+    validated_dir.mkdir(parents=True, exist_ok=True)
 
-    return clean_data
+    validated_path = validated_dir / f"{data_name}.jsonl"
 
-def validate_employees_data(**kwargs):
-    """Validate Employees Data"""
-    file_path_raw_employee = kwargs['ti'].xcom_pull(task_ids='ingest_data_master_employee.extract_employee_task', key='data_json')
+    output_data = clean_data.copy()
 
-    logger.info("=" * 150)    
-    raw_data = pd.read_json(file_path_raw_employee, lines=True)
-    clean_data = universal_base_validator(raw_data)
-    logger.info("=" * 150)  
-    
-def validate_providers_data(**kwargs):
-    """Providers Validator"""
-    file_path_raw_provider = kwargs['ti'].xcom_pull(task_ids='ingest_data_master_provider.extract_provider_task', key='data_json')
+    for column, data_type in schema.items():
+        if data_type == "DateTime":
+            output_data[column] = output_data[column].map(
+                lambda value: (
+                    value.isoformat()
+                    if not pd.isna(value)
+                    else None
+                )
+            )
 
-    logger.info("=" * 150)    
-    raw_data = pd.read_json(file_path_raw_provider, lines=True)
-    clean_data = universal_base_validator(raw_data)
-    logger.info("=" * 150)  
+    with validated_path.open("w", encoding="utf-8") as file:
+        for record in output_data.to_dict(orient="records"):
+            file.write(
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                ) + "\n"
+            )
 
-def validate_competencies_data(**kwargs):
-    """Competencies Validator"""
-    file_path_raw_competency = kwargs['ti'].xcom_pull(task_ids='ingest_data_master_competency.extract_competency_task', key='data_json')
+    logger.info(
+        "Validation successful | dataset=%s | rows=%s | "
+        "duplicates_removed=%s | output=%s",
+        data_name,
+        len(clean_data),
+        duplicates_removed,
+        validated_path,
+    )
 
-    logger.info("=" * 150)    
-    raw_data = pd.read_json(file_path_raw_competency, lines=True)
-    clean_data = universal_base_validator(raw_data)
-    logger.info("=" * 150)  
-
-def validate_units_data(**kwargs):
-    """Units Validator"""
-    file_path_raw_unit = kwargs['ti'].xcom_pull(task_ids='ingest_data_master_unit.extract_unit_task', key='data_json')
-
-    logger.info("=" * 150)    
-    raw_data = pd.read_json(file_path_raw_unit, lines=True)
-    clean_data = universal_base_validator(raw_data)
-    logger.info("=" * 150)  
-
-def validate_activity_data(**kwargs):
-    """Activity Validator"""
-    file_path_raw_activity = kwargs['ti'].xcom_pull(task_ids='ingest_data_fact_activities.extract_activities_task', key='data_json')
-
-    logger.info("=" * 150)    
-    raw_data = pd.read_json(file_path_raw_activity, lines=True)
-    clean_data = universal_base_validator(raw_data)
-    logger.info("=" * 150)  
 
 # ---------------------------------------------------------
 # TASK: INGEST DATA INTO CLICKHOUSE 
