@@ -17,7 +17,7 @@ def extract_data_from_api(**kwargs) -> str:
   file_name = kwargs.get("file_name")
   filter_field = kwargs.get("filter_key")
   last_watermark = kwargs.get("last_watermark")
-  lookback_days = kwargs.get("lookback_days")
+  lookback_days = kwargs.get("lookback_days", 0)
   params = {"limit": limit}
 
   if filter_field and last_watermark:
@@ -107,7 +107,7 @@ DATASET_SCHEMAS = {
         "lokasi_kegiatan": "String",
         "updated_at": "DateTime",
     },
-    "master_competencies": {
+    "master_competency": {
         "kode_komp": "String",
         "nama_kompetensi": "String",
         "learning_academy": "String",
@@ -115,13 +115,13 @@ DATASET_SCHEMAS = {
         "standard_point": "UInt64",
         "updated_at": "DateTime",
     },
-    "master_units": {
+    "master_unit": {
         "unit_code": "String",
         "unit_kerja": "String",
         "annual_budget_plafond": "UInt64",
         "updated_at": "DateTime",
     },
-    "master_activity": {
+    "fact_activity": {
         "activity_id": "String",
         "nama_kegiatan": "String",
         "jenis_pembelajaran": "String",
@@ -306,6 +306,28 @@ def validate_data_from_api(**kwargs) -> str:
                 )
 
             clean_data[column] = parsed
+
+        elif data_type == "Date":
+            original = clean_data[column]
+            parsed = pd.to_datetime(original, errors="coerce")
+            invalid_mask = parsed.isna() & original.notna()
+            if invalid_mask.any():
+                raise ValueError(
+                    f"Kolom '{column}' pada '{data_name}' "
+                    "mengandung nilai Date yang tidak valid."
+                )
+            clean_data[column] = parsed.dt.strftime("%Y-%m-%d")
+        
+        elif data_type == "Time":
+            original = clean_data[column]
+            parsed = pd.to_datetime(original, format="%H:%M:%S", errors="coerce")
+            invalid_mask = parsed.isna() & original.notna()
+            if invalid_mask.any():
+                raise ValueError(
+                    f"Kolom '{column}' pada '{data_name}' "
+                    "mengandung nilai Time yang tidak valid."
+                )
+            clean_data[column] = parsed.dt.strftime("%H:%M:%S")
 
         else:
             raise ValueError(
