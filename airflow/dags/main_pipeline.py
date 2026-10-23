@@ -21,7 +21,7 @@ with DAG(
 ) as dag:
 
   start_task = EmptyOperator(task_id="start_pipeline")
-  end_task = EmptyOperator(task_id="end_pipeline")
+  end_task = EmptyOperator(task_id="end_pipeline", trigger_rule=TriggerRule.ALL_DONE,)
 
   # ==========================================
   # 1. TASKGROUP: MASTER EMPLOYEES
@@ -51,7 +51,6 @@ with DAG(
     )
 
     extract_employee >> validate_employee
-
 
 
   # ==========================================
@@ -153,10 +152,10 @@ with DAG(
             "api_url": "http://data-gen-api:8000/api/v1/facts/training-activities",
             "limit": 1000,
             "last_watermark": "{{ ds }}",
-            "filter_key": "inserted_at",
+            "filter_key": "updated_since",
+            "lookback_days": 3,
             "file_name": "activity"
         },
-        trigger_rule=TriggerRule.ALL_DONE,
     )
 
     validate_activity = PythonOperator(

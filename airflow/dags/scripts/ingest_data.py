@@ -4,6 +4,7 @@ logger = logging.getLogger("airflow.task")
 import pandas as pd
 from pathlib import Path
 import json
+from datetime import datetime, timedelta
 
 # ---------------------------------------------------------
 # TASK: EXTRACT DATA FROM API 
@@ -12,25 +13,30 @@ def extract_data_from_api(**kwargs) -> str:
   """Extract Data API dengan pagination dan metode Append ke File (Format JSONL)."""
   
   api_url = kwargs.get("api_url")
-  limit = kwargs.get("limit", 5000)
+  limit = kwargs.get("limit")
+  file_name = kwargs.get("file_name")
+  filter_field = kwargs.get("filter_key")
   last_watermark = kwargs.get("last_watermark")
-  file_name = kwargs.get("file_name", "raw_data")
+  lookback_days = kwargs.get("lookback_days", 0)
   params = {"limit": limit}
-  if last_watermark:
-    filter_field = kwargs.get("filter_key", "updated_at")
-    params[filter_field] = last_watermark
 
+  if filter_field and last_watermark:
+    base_dt = datetime.strptime(last_watermark, "%Y-%m-%d")
+    effective_dt = base_dt - timedelta(days=lookback_days)
+    params[filter_field] = effective_dt.strftime("%Y-%m-%dT00:00:00")
+    logger.info(f"Incremental Filter: {filter_field} >= {params[filter_field]} (Lookback: {lookback_days} days)")
+
+  # create directory for raw data
   raw_dir = Path("/opt/airflow/logs/raw_data")
   raw_dir.mkdir(parents=True, exist_ok=True)
-
   file_path = raw_dir / f"{file_name}.jsonl"
 
   if file_path.exists():
     file_path.unlink()
 
-  total_fetched = 0
-  offset = 0
-  page = 1
+  total_fetched = 0 # show total fetched records
+  offset = 0 # pagination config
+  page = 1 # page counter
 
   logger.info("=" * 150)
   logger.info(f"🔹 START APPEND EXTRACTION: [{api_url}]")
@@ -38,8 +44,9 @@ def extract_data_from_api(**kwargs) -> str:
   try:
 
     with open(file_path, "a", encoding="utf-8") as f:
+      # start loop for pagination
       while True:
-        params["offset"] = offset
+        params["offset"] = offset # add offset into params
         logger.info(f"-> Fetching page {page} with params: {params}")
 
         response = requests.get(api_url, params=params, timeout=30)
@@ -83,7 +90,6 @@ def extract_data_from_api(**kwargs) -> str:
 # ---------------------------------------------------------
 # TASK: VALIDATOR DATA FROM API 
 # ---------------------------------------------------------
-
 DATASET_SCHEMAS = {
     "master_employee": {
         "npp": "String",
@@ -101,7 +107,7 @@ DATASET_SCHEMAS = {
         "lokasi_kegiatan": "String",
         "updated_at": "DateTime",
     },
-    "master_competencies": {
+    "master_competency": {
         "kode_komp": "String",
         "nama_kompetensi": "String",
         "learning_academy": "String",
@@ -109,13 +115,13 @@ DATASET_SCHEMAS = {
         "standard_point": "UInt64",
         "updated_at": "DateTime",
     },
-    "master_units": {
+    "master_unit": {
         "unit_code": "String",
         "unit_kerja": "String",
         "annual_budget_plafond": "UInt64",
         "updated_at": "DateTime",
     },
-    "master_activity": {
+    "fact_activity": {
         "activity_id": "String",
         "nama_kegiatan": "String",
         "jenis_pembelajaran": "String",
@@ -300,6 +306,28 @@ def validate_data_from_api(**kwargs) -> str:
                 )
 
             clean_data[column] = parsed
+
+        elif data_type == "Date":
+            original = clean_data[column]
+            parsed = pd.to_datetime(original, errors="coerce")
+            invalid_mask = parsed.isna() & original.notna()
+            if invalid_mask.any():
+                raise ValueError(
+                    f"Kolom '{column}' pada '{data_name}' "
+                    "mengandung nilai Date yang tidak valid."
+                )
+            clean_data[column] = parsed.dt.strftime("%Y-%m-%d")
+        
+        elif data_type == "Time":
+            original = clean_data[column]
+            parsed = pd.to_datetime(original, format="%H:%M:%S", errors="coerce")
+            invalid_mask = parsed.isna() & original.notna()
+            if invalid_mask.any():
+                raise ValueError(
+                    f"Kolom '{column}' pada '{data_name}' "
+                    "mengandung nilai Time yang tidak valid."
+                )
+            clean_data[column] = parsed.dt.strftime("%H:%M:%S")
 
         else:
             raise ValueError(
