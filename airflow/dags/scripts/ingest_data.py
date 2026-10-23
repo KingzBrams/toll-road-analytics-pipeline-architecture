@@ -83,7 +83,7 @@ def extract_data_from_api(**kwargs) -> str:
     )
     logger.info("=" * 150)
 
-    # Push filepath string into XCom
+    # Push filepath string into XCOM
     kwargs["ti"].xcom_push(key="data_json", value=str(file_path))
     kwargs["ti"].xcom_push(key="data_name", value=str(file_name))
     return str(file_path)
