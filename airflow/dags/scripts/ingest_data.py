@@ -313,18 +313,115 @@ def validate_data_from_api(**kwargs):
 # ---------------------------------------------------------
 # TASK: INGEST DATA INTO DATAWAREHOUSE 
 # ---------------------------------------------------------
-def ingest_data_into_datawarehouse(**kwargs):
+def ingest_data_into_datawarehouse(**kwargs) -> int:
     """Load validated JSONL into staging (datawarehouse)."""
 
+    logger.info("=" * 150)
     # Retrieve execution arguments from task instance kwargs
     validate_task_id = kwargs["validate_task_id"]
     validate_group_id = kwargs["validate_group_id"]
-    validated_data = kwargs['ti'].xcom_pull(
-        task_ids=f"{validate_group_id.validate_task_id}",
-        key="data_validated"
+    table_name = kwargs["table_name"]
+
+    validated_path_str = kwargs["ti"].xcom_pull(
+        task_ids=f"{validate_group_id}.{validate_task_id}",
+        key="data_validated",
     )
 
-    
+    if not validated_path_str:
+        raise ValueError(
+            f"Validated data path not received from task '{validate_group_id}.{validate_task_id}'."
+        )
 
+    file_path = Path(validated_path_str)
+    if not file_path.is_file():
+        raise FileNotFoundError(f"Validated JSONL file not found: {file_path}")
+
+    # Handle empty file
+    if file_path.stat().st_size == 0:
+        logger.warning(
+            "Validated file %s is empty. Skipping database ingestion for table '%s'.",
+            file_path,
+            table_name,
+        )
+        kwargs["ti"].xcom_push(key="rows_ingested", value=0)
+        return 0
+
+    # Get engine for data warehouse
+    engine = db_warehouse_engine()
+
+    chunk_size = 5000
+    chunk_index = 0
+    total_ingested_rows = 0
+
+    logger.info(
+        "Starting ingestion from %s into staging.%s (chunk_size=%d)...",
+        file_path,
+        table_name,
+        chunk_size,
+    )
+
+    try:
+        for chunk in pd.read_json(
+            file_path,
+            lines=True,
+            chunksize=chunk_size,
+            convert_dates=False,
+            dtype=False,
+        ):
+            if chunk.empty:
+                continue
+
+            chunk_index += 1
+            chunk_rows = len(chunk)
+            logger.info(
+                "Ingesting chunk %d (%d rows) into staging.%s...",
+                chunk_index,
+                chunk_rows,
+                table_name,
+            )
+
+            # Insert chunk into PostgreSQL staging schema
+            with engine.begin() as conn:
+                chunk.to_sql(
+                    name=table_name,
+                    con=conn,
+                    schema="staging",
+                    if_exists="append",
+                    index=False,
+                    method="multi",
+                    chunksize=1000,
+                )
+
+            total_ingested_rows += chunk_rows
+            logger.info(
+                "Completed chunk %d: %d rows loaded (cumulative: %d rows) into staging.%s",
+                chunk_index,
+                chunk_rows,
+                total_ingested_rows,
+                table_name,
+            )
+            logger.info("=" * 150)
+
+        logger.info(
+            "Ingestion completed successfully: total %d rows inserted into staging.%s from %s",
+            total_ingested_rows,
+            table_name,
+            file_path,
+        )
+        logger.info("=" * 150)
+
+        kwargs["ti"].xcom_push(key="rows_ingested", value=total_ingested_rows)
+        return total_ingested_rows
+
+    except Exception as e:
+        logger.error(
+            "Database ingestion failed for table 'staging.%s' from file '%s'. Error: %s",
+            table_name,
+            file_path,
+            str(e),
+            exc_info=True,
+        )
+        raise
+        
     
 

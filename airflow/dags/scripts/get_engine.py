@@ -103,7 +103,6 @@ def db_warehouse_engine(**kwargs: Any) -> Engine:
         user = os.getenv("POSTGRES_DW_USER", "de_admin")
         password = os.getenv("POSTGRES_DW_PASSWORD", "secure_postgres_password_2026")
         host = os.getenv("POSTGRES_DW_HOST", "dw_postgres")
-        # In Docker network, PostgreSQL listens on internal port 5432
         port = os.getenv("POSTGRES_DW_PORT_INTERNAL", "5432")
         database = os.getenv("POSTGRES_DW_DB", "toll_learning_dw")
 

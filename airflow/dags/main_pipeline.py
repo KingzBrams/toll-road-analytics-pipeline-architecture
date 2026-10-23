@@ -73,7 +73,17 @@ with DAG(
             },
         )
 
-    extract_employee >> validate_employee
+        load_employee = PythonOperator(
+            task_id="load_employee_task",
+            python_callable=ingest_data_into_datawarehouse,
+            op_kwargs={
+                "validate_task_id": "validate_employee_task",
+                "validate_group_id": "ingest_data_master_employee",
+                "table_name": "stg_employee",
+            },
+        )
+
+        extract_employee >> validate_employee >> load_employee
 
 
     # ==========================================
@@ -103,7 +113,17 @@ with DAG(
             },
         )
 
-    extract_provider >> validate_provider
+        load_provider = PythonOperator(
+            task_id="load_provider_task",
+            python_callable=ingest_data_into_datawarehouse,
+            op_kwargs={
+                "validate_task_id": "validate_provider_task",
+                "validate_group_id": "ingest_data_master_provider",
+                "table_name": "stg_provider",
+            },
+        )
+
+        extract_provider >> validate_provider >> load_provider
 
     # ==========================================
     # TASKGROUP: MASTER COMPETENCIES
@@ -132,7 +152,17 @@ with DAG(
             },
         )
 
-    extract_competency >> validate_competency
+        load_competency = PythonOperator(
+            task_id="load_competency_task",
+            python_callable=ingest_data_into_datawarehouse,
+            op_kwargs={
+                "validate_task_id": "validate_competency_task",
+                "validate_group_id": "ingest_data_master_competency",
+                "table_name": "stg_competency",
+            },
+        )
+
+        extract_competency >> validate_competency >> load_competency
 
     # ==========================================
     # TASKGROUP: MASTER UNITS
@@ -161,7 +191,17 @@ with DAG(
             },
         )
 
-    extract_unit >> validate_unit
+        load_unit = PythonOperator(
+            task_id="load_unit_task",
+            python_callable=ingest_data_into_datawarehouse,
+            op_kwargs={
+                "validate_task_id": "validate_unit_task",
+                "validate_group_id": "ingest_data_master_unit",
+                "table_name": "stg_unit",
+            },
+        )
+
+        extract_unit >> validate_unit >> load_unit
 
     # ==========================================
     # TASKGROUP: FACT TRAINING ACTIVITIES (Incremental)
@@ -188,7 +228,17 @@ with DAG(
             },
         )
 
-    extract_activities >> validate_activity
+        load_activity = PythonOperator(
+            task_id="load_activity_task",
+            python_callable=ingest_data_into_datawarehouse,
+            op_kwargs={
+                "validate_task_id": "validate_activity_task",
+                "validate_group_id": "ingest_data_fact_activities",
+                "table_name": "stg_activity",
+            },
+        )
+
+        extract_activities >> validate_activity >> load_activity
 
     # ==========================================
     # ORKESTRASI DAG (DEPENDENCIES)
