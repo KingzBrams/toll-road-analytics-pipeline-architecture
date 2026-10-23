@@ -6,10 +6,13 @@ from pathlib import Path
 import json
 from datetime import datetime, timedelta
 
+from scripts.get_engine import *
+
+
 # ---------------------------------------------------------
 # TASK: EXTRACT DATA FROM API 
 # ---------------------------------------------------------
-def extract_data_from_api(**kwargs) -> str:
+def extract_data_from_api(**kwargs):
   """Extract Data API dengan pagination dan metode Append ke File (Format JSONL)."""
   
   api_url = kwargs.get("api_url")
@@ -171,7 +174,7 @@ DATASET_SCHEMAS = {
     ],
 }
 
-def validate_data_from_api(**kwargs) -> str:
+def validate_data_from_api(**kwargs):
     """Validate JSONL schema and format records to string values."""
 
     # Retrieve execution arguments from task instance kwargs
@@ -307,11 +310,21 @@ def validate_data_from_api(**kwargs) -> str:
     kwargs["ti"].xcom_push(key="data_validated", value=str(validated_path))
     return str(validated_path)
    
-
 # ---------------------------------------------------------
 # TASK: INGEST DATA INTO DATAWAREHOUSE 
 # ---------------------------------------------------------
-def ingest_data_into_datawarehouse(**kwargs) -> pd.DataFrame:
-    """Ingest Data Into Datawarehouse"""
-    pass
+def ingest_data_into_datawarehouse(**kwargs):
+    """Load validated JSONL into staging (datawarehouse)."""
+
+    # Retrieve execution arguments from task instance kwargs
+    validate_task_id = kwargs["validate_task_id"]
+    validate_group_id = kwargs["validate_group_id"]
+    validated_data = kwargs['ti'].xcom_pull(
+        task_ids=f"{validate_group_id.validate_task_id}",
+        key="data_validated"
+    )
+
+    
+
+    
 
