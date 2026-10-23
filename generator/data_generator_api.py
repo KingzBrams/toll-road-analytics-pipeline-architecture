@@ -1,9 +1,8 @@
 from datetime import datetime, timedelta
 import random
-from typing import List, Optional
+from typing import Optional
 from faker import Faker
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
 
 app = FastAPI(
     title="Enterprise Corporate Learning Mock API",
@@ -20,7 +19,7 @@ DB_COMPETENCIES = []
 DB_UNITS = []
 DB_ACTIVITIES = []
 
-# Reference Data
+# Reference Data only for data master
 UNITS_LIST = [
     "Divisi Operasi Tol",
     "Divisi Pemeliharaan",
@@ -72,7 +71,7 @@ LOCATIONS = [
 
 
 # ==========================================
-# HELPER: ADVANCED DIRTY DATA INJECTION
+# HELPER: ADVANCED DIRTY DATA INJECTION (only for fact tables)
 # ==========================================
 def inject_complex_dirty_data(record: dict, probability: float = 0.30) -> dict:
     """Menyisipkan anomali data kotor tingkat lanjut secara acak
@@ -397,8 +396,8 @@ def generate_training_activities(
     summary="Fetch Training Activities",
 )
 def get_training_activities(
-    limit: int = Query(1000, ge=1, le=50000),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(1000, ge=1, le=50000, include_in_schema=False),
+    offset: int = Query(0, ge=0, include_in_schema=False),
 ):
     paginated_data = DB_ACTIVITIES[offset : offset + limit]
 
