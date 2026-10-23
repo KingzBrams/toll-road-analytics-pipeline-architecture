@@ -2,6 +2,8 @@ from datetime import datetime
 from airflow import DAG
 
 # pyrefly: ignore[missing-import]
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+# pyrefly: ignore[missing-import]
 from airflow.operators.empty import EmptyOperator
 # pyrefly: ignore[missing-import]
 from airflow.operators.python import PythonOperator
@@ -18,15 +20,35 @@ with DAG(
     # schedule="@daily",
     schedule=None,
     catchup=False,
-    max_active_runs=1
+    max_active_runs=1,
 ) as dag:
 
     start_task = EmptyOperator(task_id="start_pipeline")
     end_task = EmptyOperator(task_id="end_pipeline", trigger_rule=TriggerRule.ALL_DONE,)
 
-  # ==========================================
-  # TASKGROUP: MASTER EMPLOYEES
-  # ==========================================
+    # ==========================================
+    # TASKGROUP: CONFIG INTIAL DATAWAREHOUSE
+    # ==========================================
+    with TaskGroup("inital_datawarehouse") as tg_inital_datawarehouse:
+
+        create_table = SQLExecuteQueryOperator(
+            task_id="create_table",
+            conn_id="postgres_dw",
+            sql="queries/create_schema_table.sql",
+        )
+
+        index_table = SQLExecuteQueryOperator(
+            task_id="index_table",
+            conn_id="postgres_dw",
+            sql="queries/create_index.sql",
+        )
+
+        create_table >> index_table
+
+
+    # ==========================================
+    # TASKGROUP: MASTER EMPLOYEES
+    # ==========================================
     with TaskGroup("ingest_data_master_employee", tooltip="Ingest Master Employees") as tg_employees:
 
         extract_employee = PythonOperator(
@@ -171,7 +193,7 @@ with DAG(
     # ==========================================
     # ORKESTRASI DAG (DEPENDENCIES)
     # ==========================================
-    start_task >> [
+    start_task >> tg_inital_datawarehouse >> [
         tg_employees,
         tg_providers,
         tg_competencies,

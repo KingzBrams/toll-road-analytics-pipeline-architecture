@@ -22,6 +22,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     _PIP_ADD_REQUIREMENTS: "clickhouse-connect apache-airflow-providers-http"
+    AIRFLOW_CONN_POSTGRES_DW: postgresql://${POSTGRES_DW_USER:-de_user}:${POSTGRES_DW_PASSWORD:-de_password}@dw_postgres:5432/${POSTGRES_DW_DB:-datawarehouse}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
