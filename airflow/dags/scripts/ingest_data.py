@@ -20,13 +20,19 @@ def extract_data_from_api(**kwargs) -> str:
   lookback_days = kwargs.get("lookback_days", 0)
   params = {"limit": limit}
 
+  logger.info("=" * 150)
   if filter_field and last_watermark:
     base_dt = datetime.strptime(last_watermark, "%Y-%m-%d")
     effective_dt = base_dt - timedelta(days=lookback_days)
     params[filter_field] = effective_dt.strftime("%Y-%m-%dT00:00:00")
-    logger.info(f"Incremental Filter: {filter_field} >= {params[filter_field]} (Lookback: {lookback_days} days)")
+    logger.info(
+        "Applying incremental filter: %s >= %s (lookback: %d days)",
+        filter_field,
+        params[filter_field],
+        lookback_days,
+    )
 
-  # create directory for raw data
+  # Create directory for raw data
   raw_dir = Path("/opt/airflow/logs/raw_data")
   raw_dir.mkdir(parents=True, exist_ok=True)
   file_path = raw_dir / f"{file_name}.jsonl"
@@ -34,20 +40,18 @@ def extract_data_from_api(**kwargs) -> str:
   if file_path.exists():
     file_path.unlink()
 
-  total_fetched = 0 # show total fetched records
-  offset = 0 # pagination config
-  page = 1 # page counter
+  total_fetched = 0
+  offset = 0
+  page = 1
 
-  logger.info("=" * 150)
-  logger.info(f"🔹 START APPEND EXTRACTION: [{api_url}]")
+  logger.info("Starting extraction from API: %s", api_url)
 
   try:
 
     with open(file_path, "a", encoding="utf-8") as f:
-      # start loop for pagination
       while True:
-        params["offset"] = offset # add offset into params
-        logger.info(f"-> Fetching page {page} with params: {params}")
+        params["offset"] = offset
+        logger.info("Fetching page %d (offset=%d, limit=%d)", page, offset, limit)
 
         response = requests.get(api_url, params=params, timeout=30)
         response.raise_for_status()
@@ -55,11 +59,10 @@ def extract_data_from_api(**kwargs) -> str:
         result_json = response.json()
         page_data = result_json.get("data", [])
 
-        # Break there is not page_data
         if not page_data:
           break
         
-        # Write JSON (append method)
+        # Write JSON records in JSONL format
         for item in page_data:
           f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
@@ -70,10 +73,13 @@ def extract_data_from_api(**kwargs) -> str:
 
         offset += limit
         page += 1
+        logger.info("=" * 150)
 
     logger.info(
-        f"✅ SUCCESS: Appended total {total_fetched} rows across {page}"
-        f" page(s) to {file_path}"
+        "Extraction completed: %d rows written to %s across %d page(s)",
+        total_fetched,
+        file_path,
+        page,
     )
     logger.info("=" * 150)
 
@@ -83,303 +89,229 @@ def extract_data_from_api(**kwargs) -> str:
     return str(file_path)
 
   except requests.exceptions.RequestException as e:
-    logger.error(f"❌ ERROR: Failed during append extraction. Details: {e}")
-    logger.info("=" * 50)
+    logger.error("Extraction failed for %s: %s", api_url, e)
     raise
 
 # ---------------------------------------------------------
 # TASK: VALIDATOR DATA FROM API 
 # ---------------------------------------------------------
 DATASET_SCHEMAS = {
-    "master_employee": {
-        "npp": "String",
-        "nama": "String",
-        "level": "String",
-        "grade": "String",
-        "jabatan": "String",
-        "unit_kerja": "String",
-        "gender": "String",
-        "updated_at": "DateTime",
-    },
-    "master_provider": {
-        "provider_id": "String",
-        "learning_provider": "String",
-        "lokasi_kegiatan": "String",
-        "updated_at": "DateTime",
-    },
-    "master_competency": {
-        "kode_komp": "String",
-        "nama_kompetensi": "String",
-        "learning_academy": "String",
-        "sub_learning_academy": "String",
-        "standard_point": "UInt64",
-        "updated_at": "DateTime",
-    },
-    "master_unit": {
-        "unit_code": "String",
-        "unit_kerja": "String",
-        "annual_budget_plafond": "UInt64",
-        "updated_at": "DateTime",
-    },
-    "fact_activity": {
-        "activity_id": "String",
-        "nama_kegiatan": "String",
-        "jenis_pembelajaran": "String",
-        "category": "String",
-        "type": "String",
-        "type_event": "String",
-        "learning_academy": "String",
-        "sub_learning_academy": "String",
-        "kode_komp": "String",
-        "npp": "String",
-        "nama": "String",
-        "level": "String",
-        "grade": "String",
-        "jabatan": "String",
-        "unit_kerja": "String",
-        "gender": "String",
-        "status_kegiatan": "String",
-        "type_narasumber": "String",
-        "type_mc": "String",
-        "point": "UInt64",
-        "total_poin": "UInt64",
-        "tanggal_event": "Date",
-        "jam_mulai": "Time",
-        "jam_selesai": "Time",
-        "kat_sertifikasi": "String",
-        "inisiator_unit": "String",
-        "learning_provider": "String",
-        "lokasi_kegiatan": "String",
-        "biaya_rab_ldd": "UInt64",
-        "budget_realisasi_rab_led": "UInt64",
-        "biaya_penginapan": "UInt64",
-        "biaya_transportasi": "UInt64",
-        "biaya_konsumsi": "UInt64",
-        "biaya_training_kit": "UInt64",
-        "biaya_fasilitas_pendukung": "UInt64",
-        "total_anggaran": "UInt64",
-        "purchase_number": "String",
-        "purchase_date": "Date",
-        "npp_pic": "String",
-        "nama_pic": "String",
-        "insert_at": "DateTime",
-    },
+    "master_employee": [
+        "npp",
+        "nama",
+        "level",
+        "grade",
+        "jabatan",
+        "unit_kerja",
+        "gender",
+        "updated_at",
+    ],
+    "master_provider": [
+        "provider_id",
+        "learning_provider",
+        "lokasi_kegiatan",
+        "updated_at",
+    ],
+    "master_competency": [
+        "kode_komp",
+        "nama_kompetensi",
+        "learning_academy",
+        "sub_learning_academy",
+        "standard_point",
+        "updated_at",
+    ],
+    "master_unit": [
+        "unit_code",
+        "unit_kerja",
+        "annual_budget_plafond",
+        "updated_at",
+    ],
+    "fact_activity": [
+        "activity_id",
+        "nama_kegiatan",
+        "jenis_pembelajaran",
+        "category",
+        "type",
+        "type_event",
+        "learning_academy",
+        "sub_learning_academy",
+        "kode_komp",
+        "npp",
+        "nama",
+        "level",
+        "grade",
+        "jabatan",
+        "unit_kerja",
+        "gender",
+        "status_kegiatan",
+        "type_narasumber",
+        "type_mc",
+        "point",
+        "total_poin",
+        "tanggal_event",
+        "jam_mulai",
+        "jam_selesai",
+        "kat_sertifikasi",
+        "inisiator_unit",
+        "learning_provider",
+        "lokasi_kegiatan",
+        "biaya_rab_ldd",
+        "budget_realisasi_rab_led",
+        "biaya_penginapan",
+        "biaya_transportasi",
+        "biaya_konsumsi",
+        "biaya_training_kit",
+        "biaya_fasilitas_pendukung",
+        "total_anggaran",
+        "purchase_number",
+        "purchase_date",
+        "npp_pic",
+        "nama_pic",
+        "insert_at",
+    ],
 }
 
-NULL_VALUES = {"", "-", "N/A", "n/a", "NULL", "Null", "NaN", "nan"}
-
 def validate_data_from_api(**kwargs) -> str:
-    """Validasi data JSONL berdasarkan schema dataset."""
+    """Validate JSONL schema and format records to string values."""
 
+    # Retrieve execution arguments from task instance kwargs
     extract_task_id = kwargs["extract_task_id"]
     task_group_id = kwargs["task_group_id"]
     data_name = kwargs["data_name"]
-
-    schema = DATASET_SCHEMAS.get(data_name)
-    if schema is None:
-        raise ValueError(
-            f"Schema untuk dataset '{data_name}' tidak ditemukan. "
-            f"Dataset tersedia: {list(DATASET_SCHEMAS)}"
-        )
-
     raw_path = kwargs["ti"].xcom_pull(
         task_ids=f"{task_group_id}.{extract_task_id}",
         key="data_json",
     )
+    
+    # Verify dataset schema existence
+    logger.info("=" * 150)
+    schema = DATASET_SCHEMAS.get(data_name)
+    if schema is None:
+        raise ValueError(
+            f"Schema for dataset '{data_name}' not found. "
+            f"Available datasets: {list(DATASET_SCHEMAS)}"
+        )
 
+    # Validate presence of raw file path from upstream task
     if not raw_path:
         raise ValueError(
-            f"Path file hasil extraction tidak ditemukan dari "
-            f"task '{extract_task_id}'."
+            f"Raw file path not found from upstream task '{extract_task_id}'."
         )
 
+    # Validate file existence on disk
     file_path = Path(raw_path)
-
     if not file_path.is_file():
         raise FileNotFoundError(
-            f"File hasil extraction tidak ditemukan: {file_path}"
+            f"Raw extraction file not found: {file_path}"
         )
 
-    logger.info("Starting validation for dataset: %s", data_name)
+    logger.info("Validating dataset '%s' from %s", data_name, file_path)
 
-    clean_data = pd.read_json(file_path, lines=True)
-
-    if clean_data.empty:
-        logger.warning("Dataset '%s' tidak memiliki data.", data_name)
-
-    expected_columns = set(schema)
-    actual_columns = set(clean_data.columns)
-
-    missing_columns = expected_columns - actual_columns
-    unexpected_columns = actual_columns - expected_columns
-
-    if missing_columns:
-        raise ValueError(
-            f"Dataset '{data_name}' kehilangan kolom wajib: "
-            f"{sorted(missing_columns)}"
-        )
-
-    if unexpected_columns:
-        logger.warning(
-            "Dataset '%s' memiliki kolom yang tidak terdaftar: %s",
-            data_name,
-            sorted(unexpected_columns),
-        )
-
-    string_columns = [
-        column
-        for column, data_type in schema.items()
-        if data_type == "String"
-    ]
-
-    for column in string_columns:
-        clean_data[column] = clean_data[column].map(
-            lambda value: (
-                None
-                if pd.isna(value)
-                else (
-                    None
-                    if isinstance(value, str)
-                    and value.strip() in NULL_VALUES
-                    else (
-                        value.strip()
-                        if isinstance(value, str)
-                        else value
-                    )
-                )
-            )
-        )
-
-    for column, data_type in schema.items():
-        if data_type == "String":
-            invalid_mask = clean_data[column].map(
-                lambda value: (
-                    not pd.isna(value)
-                    and not isinstance(value, str)
-                )
-            )
-            if invalid_mask.any():
-                raise ValueError(
-                    f"Kolom '{column}' pada '{data_name}' "
-                    "mengandung nilai non-string."
-                )
-
-        elif data_type == "UInt64":
-            numeric = pd.to_numeric(
-                clean_data[column], errors="coerce"
-            )
-
-            invalid_mask = (
-                numeric.isna()
-                & clean_data[column].notna()
-            )
-
-            invalid_mask |= (
-                numeric.notna()
-                & (
-                    (numeric < 0)
-                    | (numeric % 1 != 0)
-                    | (numeric > 18446744073709551615)
-                )
-            )
-
-            if invalid_mask.any():
-                raise ValueError(
-                    f"Kolom '{column}' pada '{data_name}' "
-                    "mengandung nilai yang bukan UInt64 valid."
-                )
-
-            clean_data[column] = numeric.astype("UInt64")
-
-        elif data_type == "DateTime":
-            original = clean_data[column]
-            parsed = pd.to_datetime(
-                original, errors="coerce", utc=True
-            )
-
-            invalid_mask = parsed.isna() & original.notna()
-
-            if invalid_mask.any():
-                raise ValueError(
-                    f"Kolom '{column}' pada '{data_name}' "
-                    "mengandung nilai DateTime yang tidak valid."
-                )
-
-            clean_data[column] = parsed
-
-        elif data_type == "Date":
-            original = clean_data[column]
-            parsed = pd.to_datetime(original, errors="coerce")
-            invalid_mask = parsed.isna() & original.notna()
-            if invalid_mask.any():
-                raise ValueError(
-                    f"Kolom '{column}' pada '{data_name}' "
-                    "mengandung nilai Date yang tidak valid."
-                )
-            clean_data[column] = parsed.dt.strftime("%Y-%m-%d")
-        
-        elif data_type == "Time":
-            original = clean_data[column]
-            parsed = pd.to_datetime(original, format="%H:%M:%S", errors="coerce")
-            invalid_mask = parsed.isna() & original.notna()
-            if invalid_mask.any():
-                raise ValueError(
-                    f"Kolom '{column}' pada '{data_name}' "
-                    "mengandung nilai Time yang tidak valid."
-                )
-            clean_data[column] = parsed.dt.strftime("%H:%M:%S")
-
-        else:
-            raise ValueError(
-                f"Tipe data '{data_type}' belum didukung "
-                f"untuk kolom '{column}'."
-            )
-
-    rows_before = len(clean_data)
-    clean_data = clean_data.drop_duplicates()
-    duplicates_removed = rows_before - len(clean_data)
-
+    # Prepare destination directory and remove existing validated file
     validated_dir = Path("/opt/airflow/logs/validated_data")
     validated_dir.mkdir(parents=True, exist_ok=True)
-
     validated_path = validated_dir / f"{data_name}.jsonl"
 
-    output_data = clean_data.copy()
+    if validated_path.exists():
+        validated_path.unlink()
 
-    for column, data_type in schema.items():
-        if data_type == "DateTime":
-            output_data[column] = output_data[column].map(
-                lambda value: (
-                    value.isoformat()
-                    if not pd.isna(value)
-                    else None
+    # Handle empty raw file without processing chunks
+    if file_path.stat().st_size == 0:
+        logger.warning("Raw file is empty for dataset '%s'.", data_name)
+        validated_path.touch()
+        kwargs["ti"].xcom_push(key="data_validated", value=str(validated_path))
+        return str(validated_path)
+
+    expected_columns = set(schema)
+    total_validated_rows = 0
+    chunk_index = 0
+    chunk_size = 1000
+
+    try:
+        with validated_path.open("w", encoding="utf-8") as out_file:
+            # Process records in 1000-row chunks to prevent out-of-memory errors
+            for chunk in pd.read_json(
+                file_path,
+                lines=True,
+                chunksize=chunk_size,
+                convert_dates=False,
+                dtype=False,
+            ):
+                # Skip empty chunks
+                if chunk.empty:
+                    continue
+
+                logger.info("Processing validation chunk %d (%d rows)", chunk_index + 1, len(chunk))
+
+                # Validate expected and unexpected columns on the first chunk
+                if chunk_index == 0:
+                    actual_columns = set(chunk.columns)
+                    missing_columns = expected_columns - actual_columns
+                    if missing_columns:
+                        raise ValueError(
+                            f"Dataset '{data_name}' is missing required columns: {sorted(missing_columns)}"
+                        )
+
+                    unexpected_columns = actual_columns - expected_columns
+                    if unexpected_columns:
+                        logger.warning(
+                            "Dataset '%s' contains unexpected columns: %s",
+                            data_name,
+                            sorted(unexpected_columns),
+                        )
+
+                # Convert all columns to string representation while preserving nulls
+                chunk = chunk.where(pd.notna(chunk), None)
+                for column in chunk.columns:
+                    chunk[column] = chunk[column].map(
+                        lambda value: str(value) if value is not None else None
+                    )
+
+                # Write chunk records to the validated file in JSONL format
+                for record in chunk.to_dict(orient="records"):
+                    out_file.write(
+                        json.dumps(
+                            record,
+                            ensure_ascii=False,
+                            allow_nan=False,
+                        ) + "\n"
+                    )
+
+                total_validated_rows += len(chunk)
+                chunk_index += 1
+                logger.info(
+                    "Completed chunk %d: %d rows written (cumulative: %d rows)",
+                    chunk_index,
+                    len(chunk),
+                    total_validated_rows,
                 )
-            )
+                logger.info("=" * 150)
 
-    with validated_path.open("w", encoding="utf-8") as file:
-        for record in output_data.to_dict(orient="records"):
-            file.write(
-                json.dumps(
-                    record,
-                    ensure_ascii=False,
-                    allow_nan=False,
-                ) + "\n"
-            )
+        logger.info(
+            "Validation completed: dataset=%s | total_rows=%d | output=%s",
+            data_name,
+            total_validated_rows,
+            validated_path,
+        )
+        logger.info("=" * 150)
 
-    logger.info(
-        "Validation successful | dataset=%s | rows=%s | "
-        "duplicates_removed=%s | output=%s",
-        data_name,
-        len(clean_data),
-        duplicates_removed,
-        validated_path,
-    )
+    except Exception as e:
+        logger.error(
+            "Validation failed for dataset '%s': %s",
+            data_name,
+            e,
+        )
+        raise
 
+    # Push validated file path into XCom
+    kwargs["ti"].xcom_push(key="data_validated", value=str(validated_path))
+    return str(validated_path)
+   
 
 # ---------------------------------------------------------
-# TASK: INGEST DATA INTO CLICKHOUSE 
+# TASK: INGEST DATA INTO DATAWAREHOUSE 
 # ---------------------------------------------------------
-def ingest_data_into_clickhouse(**kwargs) -> pd.DataFrame:
-    """Ingest Data Into Clickhouse, Use Batch Insert"""
+def ingest_data_into_datawarehouse(**kwargs) -> pd.DataFrame:
+    """Ingest Data Into Datawarehouse"""
     pass
 

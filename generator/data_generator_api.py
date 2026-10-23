@@ -265,11 +265,17 @@ def get_units():
 def generate_training_activities(
     total: int = Query(
         5000, ge=1, le=100000, description="Jumlah data transaksi pelatihan"
-    )
+    ),
+    insert_from: Optional[str] = Query(
+        None, description="Batas awal tanggal insert_at (format: YYYY-MM-DD)"
+    ),
+    insert_to: Optional[str] = Query(
+        None, description="Batas akhir tanggal insert_at (format: YYYY-MM-DD)"
+    ),
 ):
     global DB_ACTIVITIES
 
-    # Auto-generate master if empty
+    # Auto-generate master records if empty
     if not DB_EMPLOYEES:
         generate_employees(30)
     if not DB_PROVIDERS:
@@ -280,23 +286,42 @@ def generate_training_activities(
         generate_units()
 
     DB_ACTIVITIES = []
-    base_date = datetime.now() - timedelta(days=120)
+
+    # Parse custom date range or fallback to standard 120-day window
+    try:
+        range_start = (
+            datetime.strptime(insert_from, "%Y-%m-%d")
+            if insert_from
+            else datetime.now() - timedelta(days=120)
+        )
+        range_end = (
+            datetime.strptime(insert_to, "%Y-%m-%d") + timedelta(days=1)
+            if insert_to
+            else datetime.now()
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Format tanggal tidak valid, gunakan YYYY-MM-DD.",
+        )
+
+    if range_start >= range_end:
+        raise HTTPException(
+            status_code=400,
+            detail="insert_from harus lebih kecil dari insert_to.",
+        )
+
+    total_seconds = max(1, int((range_end - range_start).total_seconds()))
 
     for i in range(total):
         emp = random.choice(DB_EMPLOYEES)
         prov = random.choice(DB_PROVIDERS)
         comp = random.choice(DB_COMPETENCIES)
 
-        event_date = base_date + timedelta(days=random.randint(0, 90))
-
-        if random.random() < 0.15:
-            insert_delay_days = random.randint(30, 60)
-        else:
-            insert_delay_days = random.randint(0, 3)
-
-        insert_timestamp = event_date + timedelta(
-            days=insert_delay_days, hours=random.randint(1, 10)
-        )
+        # Generate insert timestamp strictly within the selected range
+        random_seconds = random.randint(0, total_seconds)
+        insert_timestamp = range_start + timedelta(seconds=random_seconds)
+        event_date = insert_timestamp - timedelta(days=random.randint(0, 3))
 
         biaya_rab = random.choice([1000000, 2500000, 5000000, 10000000])
         realisasi_rab = int(biaya_rab * random.uniform(0.9, 1.05))
@@ -369,38 +394,17 @@ def generate_training_activities(
 
 @app.get(
     "/api/v1/facts/training-activities",
-    summary="Fetch Training Activities (Incremental Supported)",
+    summary="Fetch Training Activities",
 )
 def get_training_activities(
-    updated_since: Optional[str] = Query(
-        None,
-        description="Filter inkremental berdasarkan insert_at (format ISO: YYYY-MM-DDTHH:MM:SS)",
-    ),
     limit: int = Query(1000, ge=1, le=50000),
     offset: int = Query(0, ge=0),
 ):
-    data_to_return = DB_ACTIVITIES
-
-    if updated_since:
-        try:
-            filter_dt = datetime.fromisoformat(updated_since)
-            data_to_return = [
-                item
-                for item in DB_ACTIVITIES
-                if item.get("insert_at")
-                and datetime.fromisoformat(item["insert_at"]) >= filter_dt
-            ]
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Format `updated_since` tidak valid. Gunakan format ISO (contoh: 2026-10-01T00:00:00)",
-            )
-
-    paginated_data = data_to_return[offset : offset + limit]
+    paginated_data = DB_ACTIVITIES[offset : offset + limit]
 
     return {
         "status": "success",
-        "total_matched": len(data_to_return),
+        "total_matched": len(DB_ACTIVITIES),
         "limit": limit,
         "offset": offset,
         "data": paginated_data,

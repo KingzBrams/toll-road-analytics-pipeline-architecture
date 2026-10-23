@@ -193,6 +193,8 @@ services:
       - toll_dw_network
     environment:
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./generator:/app/generator
     restart: always
 
   # ===================================================================================

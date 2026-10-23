@@ -15,7 +15,8 @@ from scripts.ingest_data import *
 with DAG(
     dag_id="toll_road_analytics_pipeline",
     start_date=datetime(2026, 1, 1),
-    schedule="@daily",
+    # schedule="@daily",
+    schedule=None,
     catchup=False,
     max_active_runs=1
 ) as dag:
@@ -151,10 +152,7 @@ with DAG(
         op_kwargs={
             "api_url": "http://data-gen-api:8000/api/v1/facts/training-activities",
             "limit": 1000,
-            "last_watermark": "{{ ds }}",
-            "filter_key": "updated_since",
-            "lookback_days": 3,
-            "file_name": "activity"
+            "file_name": "activity",
         },
     )
 
