@@ -13,6 +13,8 @@ networks:
 # ===================================================================================
 x-airflow-common: &airflow-common
   image: apache/airflow:2.7.1-python3.10
+  env_file:
+    - .env
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
@@ -22,6 +24,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     _PIP_ADD_REQUIREMENTS: "clickhouse-connect apache-airflow-providers-http"
+    AIRFLOW_CONN_POSTGRES_DW: postgresql://${POSTGRES_DW_USER:-de_user}:${POSTGRES_DW_PASSWORD:-de_password}@dw_postgres:5432/${POSTGRES_DW_DB:-datawarehouse}
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
@@ -139,27 +142,45 @@ services:
     restart: always
 
   # ===================================================================================
-  # ClickHouse Data Warehouse
+  # PostgreSQL Data Warehouse
   # ===================================================================================
-  clickhouse:
-    image: clickhouse/clickhouse-server:23.8-alpine
-    container_name: clickhouse_dw
-    ports:
-      - "8123:8123"
-      - "9000:9000"
+  dw_postgres:
+    image: postgres:15-alpine
+    container_name: dw_postgres
+    restart: unless-stopped
     environment:
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
-      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB}
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
+      POSTGRES_USER: ${POSTGRES_DW_USER:-de_user}
+      POSTGRES_PASSWORD: ${POSTGRES_DW_PASSWORD:-de_password}
+      POSTGRES_DB: ${POSTGRES_DW_DB:-datawarehouse}
+    ports:
+      - "${POSTGRES_DW_PORT:-5432}:5432"
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
+      - postgres_datawarehouse_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_DW_USER:-de_user} -d ${POSTGRES_DW_DB:-datawarehouse}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - toll_dw_network
-    restart: always
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: dw_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "${PGADMIN_PORT:-5080}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      dw_postgres:
+        condition: service_healthy
+    networks:
+      - toll_dw_network
 
   # ===================================================================================
   # Mock Data API (Sekarang otomatis menyala bersama service lain)
@@ -175,13 +196,15 @@ services:
       - toll_dw_network
     environment:
       - PYTHONUNBUFFERED=1
+    volumes:
+      - ./generator:/app/generator
     restart: always
 
   # ===================================================================================
   # dbt CLI
   # ===================================================================================
   dbt-cli:
-    image: ghcr.io/dbt-labs/dbt-clickhouse:latest
+    image: ghcr.io/dbt-labs/dbt-postgres:1.7.0
     container_name: dbt_cli
     profiles:
       - dbt-run
@@ -194,4 +217,5 @@ services:
 
 volumes:
   postgres_airflow_data:
-  clickhouse_data:
+  postgres_datawarehouse_data:
+  pgadmin_data:

@@ -1,6 +1,6 @@
 # Toll Road Corporate Learning ELT Pipeline
 
-> A production-grade, end-to-end ELT data pipeline simulating corporate training analytics for a toll road company. Built with modern data stack architecture: **Apache Airflow**, **dbt**, **ClickHouse**, and a custom **FastAPI** mock source featuring complex dirty data injection.
+> A production-grade, end-to-end ELT data pipeline simulating corporate training analytics for a toll road company. Built with modern data stack architecture: **Apache Airflow**, **dbt**, **PostgreSQL**, and a custom **FastAPI** mock source featuring complex dirty data injection.
 
 
 ## 🛠️ How to Start This Project (Step-by-Step Guide)
@@ -22,13 +22,14 @@ AIRFLOW_UID=5000
 _AIRFLOW_WWW_USER_USERNAME=admin
 _AIRFLOW_WWW_USER_PASSWORD=admin123
 
-# ClickHouse Config
-CLICKHOUSE_USER=de_admin
-CLICKHOUSE_PASSWORD=secure_clickhouse_password_2026
-CLICKHOUSE_DB=toll_learning_dw
+# PostgreSQL Data Warehouse Config
+POSTGRES_DW_USER=de_admin
+POSTGRES_DW_PASSWORD=secure_postgres_password_2026
+POSTGRES_DW_DB=toll_learning_dw
+POSTGRES_DW_PORT=5433
 ```
 
-### Step 2: Start Core Infrastructure (Airflow, ClickHouse, & Redis)
+### Step 2: Start Core Infrastructure (Airflow, PostgreSQL DW, & Redis)
 
 Jalankan perintah Docker Compose untuk menghidupkan seluruh infrastruktur utama secara otomatis di dalam *custom network* privat (`toll_dw_network`):
 
@@ -48,16 +49,17 @@ Buka browser Anda dan akses Airflow Webserver di:
 * **Username**
 * **Password**
 
-Di dalam Airflow UI, Anda dapat melihat DAG `training_etl_pipeline` yang siap di-trigger untuk menarik data dari Mock API ke *staging* ClickHouse.
+Di dalam Airflow UI, Anda dapat melihat DAG pipeline yang siap di-trigger untuk menarik data dari Mock API ke *staging* PostgreSQL.
 
 
-### Step 4: Access ClickHouse
+### Step 4: Access PostgreSQL Data Warehouse
 
-Buka browser Anda dan akses ClickHouse di:
-**`http://localhost:8123`** 
+Akses PostgreSQL Data Warehouse menggunakan SQL client pilihan Anda (seperti DBeaver, pgAdmin, atau database extension):
 
+* **Host**
+* **Port**
 * **Username**
 * **Password**
 * **Database**
 
-Pada **`http://localhost:8123`** anda dapat melihat database toll_learning_dw dan table yang ada di dalamnya.
+Pada database `toll_learning_dw`, Anda dapat melihat tabel-tabel *staging* dan *mart* analitik yang ada di dalamnya.
