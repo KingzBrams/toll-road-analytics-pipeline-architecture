@@ -85,6 +85,9 @@ with DAG(
 
         extract_employee >> validate_employee >> load_employee
 
+    with TaskGroup("transform_data_master_employee", tooltip="Ingest Master Employees") as transform_data_master_employee:
+        pass
+
 
     # ==========================================
     # TASKGROUP: MASTER PROVIDERS

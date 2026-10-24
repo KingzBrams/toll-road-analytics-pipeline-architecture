@@ -1,0 +1,12 @@
+toll_dbt_project:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env('POSTGRES_DW_HOST') }}"
+      port: "{{ env('POSTGRES_DW_PORT') }}"
+      user: "{{ env_var('POSTGRES_DW_USER') }}"
+      pass: "{{ env_var('POSTGRES_DW_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DW_DB') }}"
+      schema: intermediate
+      threads: 4
