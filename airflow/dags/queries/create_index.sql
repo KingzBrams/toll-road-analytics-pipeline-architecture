@@ -29,8 +29,6 @@ CREATE INDEX IF NOT EXISTS idx_stg_activity_insert_at
 -- Intermediate Employee
 CREATE INDEX IF NOT EXISTS idx_int_employee_npp 
     ON intermediate.int_employee (npp);
-CREATE INDEX IF NOT EXISTS idx_int_employee_unit_kerja 
-    ON intermediate.int_employee (unit_kerja);
 
 -- Intermediate Provider
 CREATE INDEX IF NOT EXISTS idx_int_provider_id 
@@ -39,8 +37,6 @@ CREATE INDEX IF NOT EXISTS idx_int_provider_id
 -- Intermediate Competency
 CREATE INDEX IF NOT EXISTS idx_int_competency_kode 
     ON intermediate.int_competency (kode_komp);
-CREATE INDEX IF NOT EXISTS idx_int_competency_academy 
-    ON intermediate.int_competency (learning_academy);
 
 -- Intermediate Unit
 CREATE INDEX IF NOT EXISTS idx_int_unit_code 

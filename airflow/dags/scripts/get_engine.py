@@ -100,11 +100,11 @@ class DatabaseConnector:
 def db_warehouse_engine(**kwargs: Any) -> Engine:
     """Factory function to build and return PostgreSQL Data Warehouse SQLAlchemy Engine."""
     try:
-        user = os.getenv("POSTGRES_DW_USER", "de_admin")
-        password = os.getenv("POSTGRES_DW_PASSWORD", "secure_postgres_password_2026")
-        host = os.getenv("POSTGRES_DW_HOST", "dw_postgres")
-        port = os.getenv("POSTGRES_DW_PORT_INTERNAL", "5432")
-        database = os.getenv("POSTGRES_DW_DB", "toll_learning_dw")
+        user = os.getenv("POSTGRES_DW_USER")
+        password = os.getenv("POSTGRES_DW_PASSWORD")
+        host = os.getenv("POSTGRES_DW_HOST")
+        port = os.getenv("POSTGRES_DW_PORT")
+        database = os.getenv("POSTGRES_DW_DB")
 
         connector = DatabaseConnector(
             db_type="postgresql",

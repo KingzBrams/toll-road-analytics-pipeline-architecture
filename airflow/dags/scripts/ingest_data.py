@@ -410,9 +410,6 @@ def ingest_data_into_datawarehouse(**kwargs) -> int:
         )
         logger.info("=" * 150)
 
-        kwargs["ti"].xcom_push(key="rows_ingested", value=total_ingested_rows)
-        return total_ingested_rows
-
     except Exception as e:
         logger.error(
             "Database ingestion failed for table 'staging.%s' from file '%s'. Error: %s",
